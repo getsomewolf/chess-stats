@@ -16,8 +16,10 @@ jobs:
 
       - name: Run update/final
         env:
-          CHESS_USER: getsomewolf
-          TICKTICK_TOKEN: ${{ secrets.TICKTICK_TOKEN }}
+          CHESS_USER: ${{ secrets.CHESS_USER }}
+          TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+          TICKTICK_PROJECT_ID: ${{ secrets.TICKTICK_PROJECT_ID }}
           USER_EMAIL:     ${{ secrets.USER_EMAIL }}
           ACTION_MODE:    ${{ github.event.schedule == '55 23 * * *' && 'FINAL' || 'UPDATE' }}
+          DAILY_LIMIT:   ${{ secrets.DAILY_LIMIT || 10 }}
         run: node scripts/chess-daily-bot.js

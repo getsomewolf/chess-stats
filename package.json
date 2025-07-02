@@ -1,5 +1,5 @@
 {
-  "name": "chess-blocker",
+  "name": "chess-stats",
   "version": "1.0.0",
   "description": "",
   "main": "chess-stats.js",
@@ -9,5 +9,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "dotenv": "^17.0.1",
+    "node-fetch": "^3.3.2"
+  }
 }
