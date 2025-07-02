@@ -20,4 +20,4 @@ jobs:
           TICKTICK_TOKEN: ${{ secrets.TICKTICK_TOKEN }}
           USER_EMAIL:     ${{ secrets.USER_EMAIL }}
           ACTION_MODE:    ${{ github.event.schedule == '55 23 * * *' && 'FINAL' || 'UPDATE' }}
-        run: node scripts/chess-daily.js
+        run: node scripts/chess-daily-bot.js
