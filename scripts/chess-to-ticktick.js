@@ -1,51 +1,67 @@
-// Node ≥18: fetch embutido
-import fetch from 'node-fetch';
+// Node ≥18 já tem fetch; para Node 16: npm i node-fetch@3
+const fetch = global.fetch || (await import('node-fetch')).default;
 
-const {
-  USER,              // ex.: "getsomewolf"
-  TICKTICK_TOKEN,    // token OpenAPI
-  TICKTICK_TASK_ID,  // ID da tarefa recorrente
-  USER_EMAIL         // e-mail para User-Agent
-} = process.env;
+(async () => {
+  const {
+    CHESS_USER,           // ex.: "getsomewolf"
+    TICKTICK_TOKEN,       // Open-API token copiado no TickTick
+    USER_EMAIL = 'bot@example.com',
+    ACTION_MODE = 'UPDATE',       // UPDATE a cada 30 min | FINAL às 23h55 UTC
+    TASK_TITLE = 'Daily chess'    // título da tarefa recorrente
+  } = process.env;
 
-// Data UTC gravada pelo Chess.com
-const now = new Date();
-const Y  = now.getUTCFullYear();
-const M  = String(now.getUTCMonth() + 1).padStart(2, '0');
-const D  = String(now.getUTCDate()).padStart(2, '0');
-const DATE_TAG = `${Y}.${M}.${D}`;
+  /* ---------- 1. Pega partidas de hoje ---------- */
+  const now   = new Date();
+  const y     = now.getUTCFullYear();
+  const m     = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dTag  = `${y}.${m}.${String(now.getUTCDate()).padStart(2, '0')}`;
 
-// Baixa jogos do mês
-const url = `https://api.chess.com/pub/player/${USER}/games/${Y}/${M}`;
-const res = await fetch(url, { headers: { 'User-Agent': `gh-chess-bot (${USER_EMAIL})` } });
-const { games } = await res.json();
+  const chessURL = `https://api.chess.com/pub/player/${CHESS_USER}/games/${y}/${m}`;
+  const cRes     = await fetch(chessURL, { headers:{ 'User-Agent': `gh-chess-bot (${USER_EMAIL})` }});
+  const { games } = await cRes.json();
 
-// Filtra partidas do dia atual
-const today = games.filter(g => g.pgn?.includes(`[Date "${DATE_TAG}"]`));
+  let w = 0, l = 0, dr = 0;
+  games.filter(g => g.pgn?.includes(`[Date "${dTag}"]`))
+       .forEach(g => {
+          const me = g.white.username.toLowerCase() === CHESS_USER ? g.white : g.black;
+          if (me.result === 'win') w++;
+          else if (['resigned','checkmated','timeout','loss'].includes(me.result)) l++;
+          else dr++;
+       });
+  const total = w + l + dr;
 
-// Placar
-let wins = 0, losses = 0, draws = 0;
-today.forEach(g => {
-  const side   = (g.white.username.toLowerCase() === USER) ? 'white' : 'black';
-  const result = g[side].result;
-  if (result === 'win')                               wins++;
-  else if (['resigned','checkmated','timeout','loss'].includes(result)) losses++;
-  else                                                 draws++;
-});
+  /* ---------- 2. Localiza a tarefa "Daily chess" de hoje ---------- */
+  const api  = 'https://api.ticktick.com/open/v1';
+  const hdr  = { 'Authorization': `Bearer ${TICKTICK_TOKEN}` };
 
-const total = wins + losses + draws;
+  // só instâncias ativas (status 0)
+  const tasks = await fetch(`${api}/task?status=0`, { headers: hdr }).then(r => r.json());
 
-// Atualiza descrição + fecha se ≥10
-await fetch(`https://api.ticktick.com/open/v1/task/${TICKTICK_TASK_ID}`, {
-  method: 'PUT',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${TICKTICK_TOKEN}`
-  },
-  body: JSON.stringify({
-    status: total >= 10 ? 2 : 0,                         // 2 = concluído
-    content: `Jogos hoje: ${total} (Vitórias: ${wins}, Derrotas: ${losses}, Empates: ${draws})`
-  })
-});
+  const todayTask = tasks.find(t => {
+    const due = t.dueDate ? new Date(t.dueDate).toISOString().slice(0,10)
+                          : null;
+    return t.title === TASK_TITLE && due === now.toISOString().slice(0,10);
+  });
 
-console.log(`TickTick atualizado → ${total}J / ${wins}W / ${losses}L / ${draws}D`);
+  if (!todayTask) {
+    console.error(`⚠️  Instância de hoje com título "${TASK_TITLE}" não encontrada.`);
+    process.exit(1);
+  }
+
+  /* ---------- 3. Decide status ---------- */
+  let newStatus = todayTask.status;         // 0 = ativa
+  if (total >= 10)                  newStatus = 2; // concluída
+  else if (ACTION_MODE === 'FINAL') newStatus = 3; // “não farei”
+
+  /* ---------- 4. Atualiza tarefa ---------- */
+  await fetch(`${api}/task/${todayTask.id}`, {
+    method: 'PUT',
+    headers: { ...hdr, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      status:  newStatus,
+      content: `Jogos hoje: ${total}  (${w}W ${dr}D ${l}L)`
+    })
+  });
+
+  console.log(`[${ACTION_MODE}] ${total} jogos - ${w}W ${dr}D ${l}L - status→${newStatus}`);
+})();

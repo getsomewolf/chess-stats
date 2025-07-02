@@ -1,18 +1,23 @@
-name: Chess ➜ TickTick
+name: Chess ➜ TickTick (Daily)
+
 on:
-  schedule:        # roda a cada 30 min
-    - cron: '*/30 * * * *'
+  schedule:
+    - cron:  '*/30 * * * *'   # atualiza a cada 30 min
+    - cron:  '55 23 * * *'    # 23h55 UTC marca "não farei" se <10
+  workflow_dispatch:
+
 jobs:
-  update:
+  chess:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - run: node scripts/chess-to-tick.js
-        env:
-          USER: getsomewolf
-          TICKTICK_TOKEN: ${{ secrets.TICKTICK_TOKEN }}
-          USER_EMAIL: ${{ secrets.USER_EMAIL }}
-          TICKTICK_TASK_ID: ${{ secrets.TICKTICK_TASK_ID }}
 
+      - name: Run update/final
+        env:
+          CHESS_USER: getsomewolf
+          TICKTICK_TOKEN: ${{ secrets.TICKTICK_TOKEN }}
+          USER_EMAIL:     ${{ secrets.USER_EMAIL }}
+          ACTION_MODE:    ${{ github.event.schedule == '55 23 * * *' && 'FINAL' || 'UPDATE' }}
+        run: node scripts/chess-daily.js
