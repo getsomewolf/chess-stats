@@ -83,22 +83,34 @@ const axios = require('axios');
   if (total >= DAILY_LIMIT) newStatus = 2; // completed
   else if (ACTION_MODE === 'FINAL') newStatus = 3; // won't do
 
-  console.log(`🔄 Updating task status to ${newStatus}...`);
+  const newContent = `Jogos hoje: ${total}  (${w}W ${dr}D ${l}L)`;
 
-  /* ---------- 4. Atualiza tarefa ---------- */
-  try {
-    await axios.post(`${api}/task/${todayTask.id}`, {
-      projectId: TICKTICK_PROJECT_ID,
-      id: todayTask.id,
-      status: newStatus,
-      content: `Jogos hoje: ${total}  (${w}W ${dr}D ${l}L)`
+  /* ---------- 4. Check if update is needed ---------- */
+  const statusChanged = newStatus !== todayTask.status;
+  const contentChanged = newContent !== todayTask.content;
 
-    }, {
-      headers: { ...hdr, 'Content-Type': 'application/json' }
-    });
-  } catch (error) {
-    console.error('❌ Failed to update TickTick task:', error.response ? error.response.data : error.message);
-    process.exit(1);
+  if (!statusChanged && !contentChanged) {
+    console.log(`✅ No changes needed. Status: ${newStatus}, Content: "${newContent}"`);
+  } else {
+    console.log(`🔄 Updating task - Status changed: ${statusChanged}, Content changed: ${contentChanged}`);
+    console.log(`   Status: ${todayTask.status} → ${newStatus}`);
+    console.log(`   Content: "${todayTask.content}" → "${newContent}"`);
+
+    /* ---------- 5. Atualiza tarefa ---------- */
+    try {
+      await axios.post(`${api}/task/${todayTask.id}`, {
+        projectId: TICKTICK_PROJECT_ID,
+        id: todayTask.id,
+        status: newStatus,
+        content: newContent
+      }, {
+        headers: { ...hdr, 'Content-Type': 'application/json' }
+      });
+      console.log('✅ Task updated successfully');
+    } catch (error) {
+      console.error('❌ Failed to update TickTick task:', error.response ? error.response.data : error.message);
+      process.exit(1);
+    }
   }
 
   console.log(`[${ACTION_MODE}] ${total} jogos - ${w}W ${dr}D ${l}L - status→${newStatus}`);
