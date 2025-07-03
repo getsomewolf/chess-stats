@@ -3,7 +3,7 @@ name: Chess ➜ TickTick (Daily)
 on:
   schedule:
     - cron:  '*/30 * * * *'   # atualiza a cada 30 min
-    - cron:  '55 23 * * *'    # 23h55 UTC marca "não farei" se <10
+    - cron:  '55 2 * * *'    # 23h55 UTC marca "não farei" se <10
   workflow_dispatch:
 
 jobs:
