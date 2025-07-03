@@ -5,7 +5,7 @@ const axios = require('axios');
   // Load environment variables from .env file when running locally
   if (process.env.NODE_ENV !== 'production' && !process.env.GITHUB_ACTIONS) {
     // Suppress dotenv's new tip message
-    process.env.DOTENV_CONFIG_SUPPRESS = true;
+    process.env.DOTENV_CONFIG_SUPPRESS = 'true';
     try {
       const dotenv = await import('dotenv');
       dotenv.config({ debug: process.env.NODE_ENV === 'debug' });
