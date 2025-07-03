@@ -23,7 +23,7 @@ jobs:
           TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
           TICKTICK_PROJECT_ID: ${{ secrets.TICKTICK_PROJECT_ID }}
           USER_EMAIL:     ${{ secrets.USER_EMAIL }}
-          ACTION_MODE:    ${{ github.event.schedule == '55 23 * * *' && 'FINAL' || 'UPDATE' }}
+          ACTION_MODE:    ${{ github.event.schedule == '55 2 * * *' && 'FINAL' || 'UPDATE' }}
           DAILY_LIMIT:   ${{ secrets.DAILY_LIMIT || 10 }}
           TIMEZONE:      ${{ secrets.TIMEZONE || 'UTC' }}
           NODE_ENV: production
