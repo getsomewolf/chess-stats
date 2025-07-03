@@ -8,11 +8,16 @@ const axios = require('axios');
     process.env.DOTENV_CONFIG_SUPPRESS = 'true';
     try {
       const dotenv = await import('dotenv');
-      dotenv.config({ debug: process.env.DEBUG === 'true' });
+      dotenv.config({ debug: process.env.DEBUG === true });
       console.log('📄 Loaded .env file for local development');
     } catch (err) {
       console.log('⚠️  No .env file found or dotenv not installed');
     }
+  }
+
+   // Disable debug logs unless DEBUG=true is set
+  if (process.env.DEBUG !== true) {
+    console.debug = () => {};
   }
 
   const {
@@ -104,7 +109,7 @@ const axios = require('axios');
     const gameDateString = timezoneFormatter.format(gameUtcDate);
 
     console.debug(`Game date in ${TIMEZONE}: ${gameDateString}`);
-    
+
     // If the game was played today (in the target timezone), count the result
     if (gameDateString === todayDateString) {
       const me = g.white.username.toLowerCase() === CHESS_USER.toLowerCase() ? g.white : g.black;
@@ -149,11 +154,13 @@ const axios = require('axios');
   }
 
   console.log(`📅 Found task "${todayTask.title}" for today with ID ${todayTask.id}. Here's the raw data: ${JSON.stringify(todayTask)}`);
+  const TICKTICK_STATUS_COMPLETED = 2;
+  const TICKTICK_STATUS_WONT_DO = 3;
 
   /* ---------- 4. Decide status ---------- */
   let newStatus = todayTask.status;
-  if (total >= DAILY_LIMIT) newStatus = 2; // completed
-  else if (ACTION_MODE === 'FINAL') newStatus = 3; // won't do
+  if (total >= DAILY_LIMIT) newStatus = TICKTICK_STATUS_COMPLETED; // completed
+  else if (ACTION_MODE === 'FINAL') newStatus = TICKTICK_STATUS_WONT_DO; // won't do
 
   const newContent = `Jogos hoje: ${total}  (${stats.w}W ${stats.dr}D ${stats.l}L)`;
 
