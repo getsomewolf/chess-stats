@@ -26,4 +26,5 @@ jobs:
           ACTION_MODE:    ${{ github.event.schedule == '55 23 * * *' && 'FINAL' || 'UPDATE' }}
           DAILY_LIMIT:   ${{ secrets.DAILY_LIMIT || 10 }}
           TIMEZONE:      ${{ secrets.TIMEZONE || 'UTC' }}
+          NODE_ENV: production
         run: node scripts/chess-daily-bot.js
