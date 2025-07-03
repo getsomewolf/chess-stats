@@ -37,6 +37,7 @@
     - `CHESS_USER`: Your Chess.com username.
     - `TICKTICK_ACCESS_TOKEN`: The token you just generated.
     - `TICKTICK_PROJECT_ID`: The ID of the TickTick project you want to update.
+    - `TIMEZONE` (optional): Your local timezone for accurate date calculations (e.g., `America/Sao_Paulo`, `America/New_York`, `Europe/London`). Defaults to `UTC`.
 
 6.  **Run the bot:**
     ```bash
@@ -54,6 +55,7 @@ Set up the following repository secrets in GitHub:
 - `USER_EMAIL` (optional)
 - `ACTION_MODE` (optional)
 - `TASK_TITLE` (optional)
+- `TIMEZONE` (optional): Your local timezone for accurate date calculations (e.g., `America/Sao_Paulo`, `America/New_York`, `Europe/London`). Defaults to `UTC`.
 
 The script automatically detects when it's running in GitHub Actions (`GITHUB_ACTIONS` environment variable) and skips loading the `.env` file.
 

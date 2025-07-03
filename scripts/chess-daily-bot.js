@@ -20,7 +20,8 @@ const axios = require('axios');
     TICKTICK_PROJECT_ID,
     USER_EMAIL = 'bot@example.com',
     ACTION_MODE = 'UPDATE',
-    TASK_TITLE = 'Daily chess'
+    TASK_TITLE = 'Daily chess',
+    TIMEZONE = 'UTC'
   } = process.env;
 
   if (!TICKTICK_ACCESS_TOKEN) {
@@ -29,11 +30,24 @@ const axios = require('axios');
     process.exit(1);
   }
 
+  /* ---------- Helper function to get date in user's timezone ---------- */
+  function getDateInTimezone(timezone) {
+    const now = new Date();
+    
+    if (timezone === 'UTC') {
+      return now;
+    }
+    
+    // Create a date in the specified timezone
+    const userTime = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+    return userTime;
+  }
+
   /* ---------- 1. Pega partidas de hoje ---------- */
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const dTag = `${y}.${m}.${String(now.getUTCDate()).padStart(2, '0')}`;
+  const now = getDateInTimezone(TIMEZONE);
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const dTag = `${y}.${m}.${String(now.getDate()).padStart(2, '0')}`;
 
   const chessURL = `https://api.chess.com/pub/player/${CHESS_USER}/games/${y}/${m}`;
   const cRes = await axios.get(chessURL, { headers: { 'User-Agent': `gh-chess-bot (${USER_EMAIL})` } });
@@ -68,7 +82,8 @@ const axios = require('axios');
 
   const todayTask = tickTickData.tasks.find(t => {
     const dueDate = t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : null;
-    return t.title === TASK_TITLE && dueDate === now.toISOString().slice(0, 10);
+    const todayDate = now.toISOString().slice(0, 10);
+    return t.title === TASK_TITLE && dueDate === todayDate;
   });
 
   if (!todayTask) {
