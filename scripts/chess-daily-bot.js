@@ -5,18 +5,18 @@ const axios = require('axios');
   // Load environment variables from .env file when running locally
   if (process.env.NODE_ENV !== 'production' && !process.env.GITHUB_ACTIONS) {
     // Suppress dotenv's new tip message
-    process.env.DOTENV_CONFIG_SUPPRESS = 'true';
+    process.env.DOTENV_CONFIG_SUPPRESS = true;
     try {
       const dotenv = await import('dotenv');
-      dotenv.config({ debug: process.env.DEBUG === true });
+      dotenv.config({ debug: process.env.NODE_ENV === 'debug' });
       console.log('📄 Loaded .env file for local development');
     } catch (err) {
       console.log('⚠️  No .env file found or dotenv not installed');
     }
   }
 
-   // Disable debug logs unless DEBUG=true is set
-  if (process.env.DEBUG !== true) {
+   // Disable debug logs unless NODE_ENV='debug' is set
+  if (process.env.NODE_ENV !== 'debug') {
     console.debug = () => {};
   }
 
@@ -141,11 +141,11 @@ const axios = require('axios');
   }
 
   const todayTask = tickTickData.tasks.find(t => {
-    if (!t.dueDate) return false;
-    // TickTick's dueDate is like "2025-07-03T18:00:00.000+0000"
+    if (!t.startDate) return false;
+    // TickTick's startDate is like "2025-07-03T18:00:00.000+0000"
     // We just need the date part, which is already in UTC.
-    const taskDueDate = t.dueDate.slice(0, 10);
-    return t.title === TASK_TITLE && taskDueDate === todayDateString;
+    const taskStartDate = t.startDate.slice(0, 10);
+    return t.title === TASK_TITLE && taskStartDate === todayDateString;
   });
 
   if (!todayTask) {
@@ -153,7 +153,7 @@ const axios = require('axios');
     process.exit(1);
   }
 
-  console.log(`📅 Found task "${todayTask.title}" for today with ID ${todayTask.id}. Here's the raw data: ${JSON.stringify(todayTask)}`);
+  console.log(`📅 Found task "${todayTask.title}" for today with ID ${todayTask.id}.`);
   const TICKTICK_STATUS_COMPLETED = 2;
   const TICKTICK_STATUS_WONT_DO = 3;
 
@@ -175,7 +175,7 @@ const axios = require('axios');
     console.log(`   Status: ${todayTask.status} → ${newStatus}`);
     console.log(`   Content: "${todayTask.content}" → "${newContent}"`);
 
-    /* ---------- 6. Atualiza tarefa ---------- */
+    /* ---------- 6. Update task ---------- */
     try {
       await axios.post(`${api}/task/${todayTask.id}`, {
         projectId: TICKTICK_PROJECT_ID,
