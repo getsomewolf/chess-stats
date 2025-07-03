@@ -15,6 +15,7 @@ const axios = require('axios');
 
   const {
     CHESS_USER,
+    DAILY_LIMIT = 10,
     TICKTICK_ACCESS_TOKEN,
     TICKTICK_PROJECT_ID,
     USER_EMAIL = 'bot@example.com',
@@ -79,7 +80,7 @@ const axios = require('axios');
 
   /* ---------- 3. Decide status ---------- */
   let newStatus = todayTask.status;
-  if (total >= 10) newStatus = 2; // completed
+  if (total >= DAILY_LIMIT) newStatus = 2; // completed
   else if (ACTION_MODE === 'FINAL') newStatus = 3; // won't do
 
   console.log(`🔄 Updating task status to ${newStatus}...`);
