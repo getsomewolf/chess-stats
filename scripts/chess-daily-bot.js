@@ -159,6 +159,10 @@ const axios = require('axios');
     process.exit(1);
   }
 
+  // TickTick status constants
+  const TICKTICK_STATUS_COMPLETED = 2;
+  const TICKTICK_STATUS_WONT_DO = 3;
+
   // Helper function to find task by date
   const findTaskByDate = (dateString) => {
     return tickTickData.tasks.find(t => {
@@ -168,6 +172,54 @@ const axios = require('axios');
       const taskStartDate = t.startDate.slice(0, 10);
       return t.title === TASK_TITLE && taskStartDate === dateString;
     });
+  };
+
+  // Helper function to extract game count from task content
+  const extractGameCountFromContent = (content) => {
+    if (!content) return 0;
+    const match = content.match(/Jogos\s+(?:hoje|ontem):\s*(\d+)/i);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  // Helper function to check if task was completed by reaching daily limit
+  const wasCompletedByLimit = (task) => {
+    if (!task || task.status !== TICKTICK_STATUS_COMPLETED) return false;
+    const gameCount = extractGameCountFromContent(task.content);
+    return gameCount >= DAILY_LIMIT;
+  };
+
+  // Helper function to complete a task using the /complete endpoint
+  const completeTask = async (taskId, taskDescription = 'task') => {
+    try {
+      console.log(`🔄 Completing ${taskDescription}...`);
+      await axios.post(`${api}/task/${taskId}/complete`, {}, {
+        headers: { ...hdr, 'Content-Type': 'application/json' }
+      });
+      console.log(`✅ ${taskDescription} completed successfully`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to complete ${taskDescription}:`, error.response ? error.response.data : error.message);
+      return false;
+    }
+  };
+
+  // Helper function to update task content and status
+  const updateTask = async (taskId, updates, taskDescription = 'task') => {
+    try {
+      await axios.post(`${api}/task/${taskId}`, {
+        projectId: TICKTICK_PROJECT_ID,
+        id: taskId,
+        isAllDay: true,
+        ...updates
+      }, {
+        headers: { ...hdr, 'Content-Type': 'application/json' }
+      });
+      console.log(`✅ ${taskDescription} updated successfully`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to update ${taskDescription}:`, error.response ? error.response.data : error.message);
+      return false;
+    }
   };
 
   // First, try to find today's task
@@ -180,33 +232,34 @@ const axios = require('axios');
     const yesterdayTask = findTaskByDate(yesterdayDateString);
     
     if (yesterdayTask) {
-      console.log(`📅 Found yesterday's task "${yesterdayTask.title}" with ID ${yesterdayTask.id}.`);
+      console.log(`📅 Found yesterday's task "${yesterdayTask.title}" with ID ${yesterdayTask.id}, status: ${yesterdayTask.status}.`);
       
-      // Complete yesterday's task using the /complete endpoint
-      try {
-        console.log('🔄 Completing yesterday\'s task...');
-        await axios.post(`${api}/task/${yesterdayTask.id}/complete`, {}, {
-          headers: { ...hdr, 'Content-Type': 'application/json' }
-        });
-        console.log('✅ Yesterday\'s task completed successfully');
-        
-        // Wait a bit for TickTick to potentially create today's task
-        console.log('⏳ Waiting for TickTick to create today\'s task...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Re-fetch tasks to get the updated list
-        const updatedTasksResponse = await axios.get(`${api}/project/${TICKTICK_PROJECT_ID}/data`, { headers: hdr });
-        tickTickData = updatedTasksResponse.data;
-        
-        // Try to find today's task again
-        todayTask = findTaskByDate(todayDateString);
-        
-        if (!todayTask) {
-          console.log(`⚠️  Today's task still not found after completing yesterday's task. This is expected if TickTick doesn't auto-create recurring tasks.`);
+      // Check if yesterday's task was already completed by reaching the daily limit
+      if (wasCompletedByLimit(yesterdayTask)) {
+        console.log('✅ Yesterday\'s task was already completed by reaching the daily limit. No need to complete it again.');
+      } else if (yesterdayTask.status === TICKTICK_STATUS_COMPLETED) {
+        console.log('✅ Yesterday\'s task is already completed (but not by reaching limit).');
+      } else {
+        // Complete yesterday's task only if it wasn't completed by reaching the limit
+        const completed = await completeTask(yesterdayTask.id, "yesterday's task");
+        if (!completed) {
+          console.log('⚠️  Could not complete yesterday\'s task, but continuing...');
         }
-      } catch (error) {
-        console.error('❌ Failed to complete yesterday\'s task:', error.response ? error.response.data : error.message);
-        // Don't exit here, continue with the process
+      }
+      
+      // Wait a bit for TickTick to potentially create today's task
+      console.log('⏳ Waiting for TickTick to create today\'s task...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Re-fetch tasks to get the updated list
+      const updatedTasksResponse = await axios.get(`${api}/project/${TICKTICK_PROJECT_ID}/data`, { headers: hdr });
+      tickTickData = updatedTasksResponse.data;
+      
+      // Try to find today's task again
+      todayTask = findTaskByDate(todayDateString);
+      
+      if (!todayTask) {
+        console.log(`⚠️  Today's task still not found after processing yesterday's task. This is expected if TickTick doesn't auto-create recurring tasks.`);
       }
     } else {
       console.log(`⚠️  No task found for yesterday either. This might be the first run or task doesn't exist.`);
@@ -219,8 +272,6 @@ const axios = require('axios');
   }
 
   console.log(`📅 Found task "${todayTask.title}" for today with ID ${todayTask.id}.`);
-  const TICKTICK_STATUS_COMPLETED = 2;
-  const TICKTICK_STATUS_WONT_DO = 3;
 
   /* ---------- 4. Decide status ---------- */
   let newStatus = todayTask.status;
@@ -241,41 +292,29 @@ const axios = require('axios');
     console.log(`   Content: "${todayTask.content}" → "${newContent}"`);
 
     /* ---------- 6. Update task ---------- */
-    try {
-      // If we're marking the task as completed (status 2), use the /complete endpoint
-      if (newStatus === TICKTICK_STATUS_COMPLETED && statusChanged) {
-        console.log('🔄 Completing task using /complete endpoint...');
-        await axios.post(`${api}/task/${todayTask.id}/complete`, {}, {
-          headers: { ...hdr, 'Content-Type': 'application/json' }
-        });
-        
-        // Update content separately if needed
-        if (contentChanged) {
-          await axios.post(`${api}/task/${todayTask.id}`, {
-            projectId: TICKTICK_PROJECT_ID,
-            id: todayTask.id,
-            content: newContent,
-            isAllDay: true
-          }, {
-            headers: { ...hdr, 'Content-Type': 'application/json' }
-          });
-        }
-      } else {
-        // For other status changes or content-only updates, use the regular endpoint
-        await axios.post(`${api}/task/${todayTask.id}`, {
-          projectId: TICKTICK_PROJECT_ID,
-          id: todayTask.id,
-          status: newStatus,
-          content: newContent,
-          isAllDay: true
-        }, {
-          headers: { ...hdr, 'Content-Type': 'application/json' }
-        });
+    // If we're marking the task as completed (status 2), use the /complete endpoint
+    if (newStatus === TICKTICK_STATUS_COMPLETED && statusChanged) {
+      const completed = await completeTask(todayTask.id, "today's task");
+      if (!completed) {
+        process.exit(1);
       }
-      console.log('✅ Task updated successfully');
-    } catch (error) {
-      console.error('❌ Failed to update TickTick task:', error.response ? error.response.data : error.message);
-      process.exit(1);
+      
+      // Update content separately if needed
+      if (contentChanged) {
+        const updated = await updateTask(todayTask.id, { content: newContent }, "today's task content");
+        if (!updated) {
+          process.exit(1);
+        }
+      }
+    } else {
+      // For other status changes or content-only updates, use the regular endpoint
+      const updated = await updateTask(todayTask.id, { 
+        status: newStatus,
+        content: newContent
+      }, "today's task");
+      if (!updated) {
+        process.exit(1);
+      }
     }
   }
 
