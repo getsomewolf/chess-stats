@@ -26,7 +26,6 @@ const axios = require('axios');
     TICKTICK_ACCESS_TOKEN,
     TICKTICK_PROJECT_ID,
     USER_EMAIL = 'bot@example.com',
-    ACTION_MODE = 'UPDATE',
     TASK_TITLE = 'Daily chess',
     TIMEZONE = 'UTC'
   } = process.env;
@@ -48,11 +47,31 @@ const axios = require('axios');
     day: '2-digit'
   });
 
+  // Create a formatter to get time in the target timezone
+  const timeFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+
   // Get today's date string (YYYY-MM-DD) in the target timezone
   const todayDateString = timezoneFormatter.format(now);
   const [y, m] = todayDateString.split('-');
 
+  // Get yesterday's date string
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayDateString = timezoneFormatter.format(yesterday);
+
+  // Determine if it's "final time" (after 23:00 in user's timezone)
+  const currentTime = timeFormatter.format(now);
+  const [hour, minute] = currentTime.split(':').map(Number);
+  const isFinalTime = hour >= 23;
+
   console.debug(`📅 Today in ${TIMEZONE}: ${todayDateString}`);
+  console.debug(`📅 Yesterday in ${TIMEZONE}: ${yesterdayDateString}`);
+  console.debug(`🕐 Current time in ${TIMEZONE}: ${currentTime} (Final time: ${isFinalTime})`);
 
   /* ---------- 2. Fetch Chess.com Games ---------- */
   const fetchGamesForMonth = async (year, month) => {
@@ -140,16 +159,62 @@ const axios = require('axios');
     process.exit(1);
   }
 
-  const todayTask = tickTickData.tasks.find(t => {
-    if (!t.startDate) return false;
-    // TickTick's startDate is like "2025-07-03T18:00:00.000+0000"
-    // We just need the date part, which is already in UTC.
-    const taskStartDate = t.startDate.slice(0, 10);
-    return t.title === TASK_TITLE && taskStartDate === todayDateString;
-  });
+  // Helper function to find task by date
+  const findTaskByDate = (dateString) => {
+    return tickTickData.tasks.find(t => {
+      if (!t.startDate) return false;
+      // TickTick's startDate is like "2025-07-03T18:00:00.000+0000"
+      // We just need the date part, which is already in UTC.
+      const taskStartDate = t.startDate.slice(0, 10);
+      return t.title === TASK_TITLE && taskStartDate === dateString;
+    });
+  };
+
+  // First, try to find today's task
+  let todayTask = findTaskByDate(todayDateString);
+  
+  if (!todayTask) {
+    console.log(`⚠️  Task with title "${TASK_TITLE}" for today not found. Checking yesterday...`);
+    
+    // Look for yesterday's task
+    const yesterdayTask = findTaskByDate(yesterdayDateString);
+    
+    if (yesterdayTask) {
+      console.log(`📅 Found yesterday's task "${yesterdayTask.title}" with ID ${yesterdayTask.id}.`);
+      
+      // Complete yesterday's task using the /complete endpoint
+      try {
+        console.log('🔄 Completing yesterday\'s task...');
+        await axios.post(`${api}/task/${yesterdayTask.id}/complete`, {}, {
+          headers: { ...hdr, 'Content-Type': 'application/json' }
+        });
+        console.log('✅ Yesterday\'s task completed successfully');
+        
+        // Wait a bit for TickTick to potentially create today's task
+        console.log('⏳ Waiting for TickTick to create today\'s task...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Re-fetch tasks to get the updated list
+        const updatedTasksResponse = await axios.get(`${api}/project/${TICKTICK_PROJECT_ID}/data`, { headers: hdr });
+        tickTickData = updatedTasksResponse.data;
+        
+        // Try to find today's task again
+        todayTask = findTaskByDate(todayDateString);
+        
+        if (!todayTask) {
+          console.log(`⚠️  Today's task still not found after completing yesterday's task. This is expected if TickTick doesn't auto-create recurring tasks.`);
+        }
+      } catch (error) {
+        console.error('❌ Failed to complete yesterday\'s task:', error.response ? error.response.data : error.message);
+        // Don't exit here, continue with the process
+      }
+    } else {
+      console.log(`⚠️  No task found for yesterday either. This might be the first run or task doesn't exist.`);
+    }
+  }
 
   if (!todayTask) {
-    console.error(`⚠️  Task with title "${TASK_TITLE}" for today not found.`);
+    console.error(`⚠️  Task with title "${TASK_TITLE}" for today not found after all attempts.`);
     process.exit(1);
   }
 
@@ -160,7 +225,7 @@ const axios = require('axios');
   /* ---------- 4. Decide status ---------- */
   let newStatus = todayTask.status;
   if (total >= DAILY_LIMIT) newStatus = TICKTICK_STATUS_COMPLETED; // completed
-  else if (ACTION_MODE === 'FINAL') newStatus = TICKTICK_STATUS_WONT_DO; // won't do
+  else if (isFinalTime) newStatus = TICKTICK_STATUS_WONT_DO; // won't do
 
   const newContent = `Jogos hoje: ${total}  (${stats.w}W ${stats.dr}D ${stats.l}L)`;
 
@@ -177,15 +242,36 @@ const axios = require('axios');
 
     /* ---------- 6. Update task ---------- */
     try {
-      await axios.post(`${api}/task/${todayTask.id}`, {
-        projectId: TICKTICK_PROJECT_ID,
-        id: todayTask.id,
-        status: newStatus,
-        content: newContent,
-        isAllDay: true
-      }, {
-        headers: { ...hdr, 'Content-Type': 'application/json' }
-      });
+      // If we're marking the task as completed (status 2), use the /complete endpoint
+      if (newStatus === TICKTICK_STATUS_COMPLETED && statusChanged) {
+        console.log('🔄 Completing task using /complete endpoint...');
+        await axios.post(`${api}/task/${todayTask.id}/complete`, {}, {
+          headers: { ...hdr, 'Content-Type': 'application/json' }
+        });
+        
+        // Update content separately if needed
+        if (contentChanged) {
+          await axios.post(`${api}/task/${todayTask.id}`, {
+            projectId: TICKTICK_PROJECT_ID,
+            id: todayTask.id,
+            content: newContent,
+            isAllDay: true
+          }, {
+            headers: { ...hdr, 'Content-Type': 'application/json' }
+          });
+        }
+      } else {
+        // For other status changes or content-only updates, use the regular endpoint
+        await axios.post(`${api}/task/${todayTask.id}`, {
+          projectId: TICKTICK_PROJECT_ID,
+          id: todayTask.id,
+          status: newStatus,
+          content: newContent,
+          isAllDay: true
+        }, {
+          headers: { ...hdr, 'Content-Type': 'application/json' }
+        });
+      }
       console.log('✅ Task updated successfully');
     } catch (error) {
       console.error('❌ Failed to update TickTick task:', error.response ? error.response.data : error.message);
@@ -193,5 +279,6 @@ const axios = require('axios');
     }
   }
 
-  console.log(`[${ACTION_MODE}] ${total} jogos - ${stats.w}W ${stats.dr}D ${stats.l}L - status→${newStatus}`);
+  const actionMode = isFinalTime ? 'FINAL' : 'UPDATE';
+  console.log(`[${actionMode}] ${total} jogos - ${stats.w}W ${stats.dr}D ${stats.l}L - status→${newStatus}`);
 })();

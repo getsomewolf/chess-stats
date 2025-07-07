@@ -58,7 +58,6 @@ Set up the following repository secrets in GitHub:
 - `TICKTICK_ACCESS_TOKEN`
 - `TICKTICK_PROJECT_ID`
 - `USER_EMAIL` (optional)
-- `ACTION_MODE` (optional)
 - `TASK_TITLE` (optional)
 - `TIMEZONE` (optional): Your local timezone for accurate date calculations (e.g., `America/Sao_Paulo`, `America/New_York`, `Europe/London`). Defaults to `UTC`.
 
