@@ -3,7 +3,6 @@ name: Chess ➜ TickTick (Daily)
 on:
   schedule:
     - cron:  '*/30 * * * *'   # atualiza a cada 30 min
-    - cron:  '55 1 * * *'    # atualiza às 01:55 UTC
   workflow_dispatch:
 
 jobs:
@@ -17,13 +16,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run update/final
+      - name: Run chess daily bot
         env:
           CHESS_USER: ${{ secrets.CHESS_USER }}
           TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
           TICKTICK_PROJECT_ID: ${{ secrets.TICKTICK_PROJECT_ID }}
           USER_EMAIL:     ${{ secrets.USER_EMAIL }}
-          ACTION_MODE:    ${{ github.event.schedule == '55 1 * * *' && 'FINAL' || 'UPDATE' }}
           DAILY_LIMIT:   ${{ secrets.DAILY_LIMIT || 10 }}
           TIMEZONE:      ${{ secrets.TIMEZONE || 'UTC' }}
           NODE_ENV: production
