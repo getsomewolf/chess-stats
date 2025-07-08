@@ -1,6 +1,8 @@
 // Node ≥18 já tem fetch; para Node 16: npm i node-fetch@3
 const axios = require('axios');
 
+
+
 (async () => {
   // Load environment variables from .env file when running locally
   if (process.env.NODE_ENV !== 'production' && !process.env.GITHUB_ACTIONS) {
@@ -18,7 +20,7 @@ const axios = require('axios');
    // Disable debug logs unless NODE_ENV='debug' is set
   if (process.env.NODE_ENV !== 'debug') {
     console.debug = () => {};
-  }
+  }  
 
   const {
     CHESS_USER,
@@ -112,7 +114,7 @@ const axios = require('axios');
       return acc;
     }
     
-    console.debug(`🔍 Processing game: ${g.url} (${g.end_time})`);
+    //console.debug(`🔍 Processing game: ${g.url} (${g.end_time})`);
 
     // Extract UTC date and time from PGN
     const utcDateMatch = g.pgn.match(/\[UTCDate "(\d{4}\.\d{2}\.\d{2})"\]/);
@@ -127,7 +129,7 @@ const axios = require('axios');
     const gameUtcDate = new Date(`${utcDateMatch[1].replace(/\./g, '-')}T${utcTimeMatch[1]}Z`);
     const gameDateString = timezoneFormatter.format(gameUtcDate);
 
-    console.debug(`Game date in ${TIMEZONE}: ${gameDateString}`);
+    //console.debug(`Game date in ${TIMEZONE}: ${gameDateString}`);
 
     // If the game was played today (in the target timezone), count the result
     if (gameDateString === todayDateString) {
@@ -146,7 +148,8 @@ const axios = require('axios');
   const api = 'https://api.ticktick.com/open/v1';
   const hdr = {
     'Authorization': `Bearer ${TICKTICK_ACCESS_TOKEN}`,
-    'Accept': 'application/json'
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
   };
 
   console.log('🔍 Fetching tasks from TickTick project...');
@@ -160,8 +163,9 @@ const axios = require('axios');
   }
 
   // TickTick status constants
+  const TICKTICK_STATUS_TODO = 0; // Not started
   const TICKTICK_STATUS_COMPLETED = 2;
-  const TICKTICK_STATUS_WONT_DO = 3;
+  const TICKTICK_STATUS_WONT_DO = -1;
 
   // Helper function to find task by date
   const findTaskByDate = (dateString) => {
@@ -183,8 +187,9 @@ const axios = require('axios');
 
   // Helper function to check if task was completed by reaching daily limit
   const wasCompletedByLimit = (task) => {
-    if (!task || task.status !== TICKTICK_STATUS_COMPLETED) return false;
+    if (!task) return false;
     const gameCount = extractGameCountFromContent(task.content);
+    console.debug(`🔍 Checking if task "${task.title}" was completed by reaching daily limit: ${gameCount} games`);
     return gameCount >= DAILY_LIMIT;
   };
 
@@ -192,8 +197,8 @@ const axios = require('axios');
   const completeTask = async (taskId, taskDescription = 'task') => {
     try {
       console.log(`🔄 Completing ${taskDescription}...`);
-      await axios.post(`${api}/task/${taskId}/complete`, {}, {
-        headers: { ...hdr, 'Content-Type': 'application/json' }
+      await axios.post(`${api}/project/${TICKTICK_PROJECT_ID}/task/${taskId}/complete`, {}, {
+        headers: { ...hdr }
       });
       console.log(`✅ ${taskDescription} completed successfully`);
       return true;
@@ -212,12 +217,39 @@ const axios = require('axios');
         isAllDay: true,
         ...updates
       }, {
-        headers: { ...hdr, 'Content-Type': 'application/json' }
+        headers: { ...hdr }
       });
       console.log(`✅ ${taskDescription} updated successfully`);
+      console.debug(`   Updates: ${JSON.stringify(updates)}`);
       return true;
     } catch (error) {
       console.error(`❌ Failed to update ${taskDescription}:`, error.response ? error.response.data : error.message);
+      return false;
+    }
+  };
+
+  const createTask = async (title, content, dateString) => {
+    try {
+      const taskData = {
+        projectId: TICKTICK_PROJECT_ID,
+        title: title, 
+        content: content,
+        startDate: `${dateString}T00:00:00.000+0000`,
+        dueDate: `${dateString}T23:59:59.999+0000`, // TickTick expects dueDate in this format
+        isAllDay: true,
+        status: TICKTICK_STATUS_TODO,
+        priority: 3,
+        timeZone: TIMEZONE,
+        repeatFlag: "RRULE:FREQ=DAILY;INTERVAL=1",
+      }
+      console.log(`🔄 Creating task for ${dateString}...`);
+      await axios.post(`${api}/task`, taskData, {
+        headers: { ...hdr }
+      });
+      console.log(`✅ Task for ${dateString} created successfully`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to create task for ${dateString}:`, error.response ? error.response.data : error.message);
       return false;
     }
   };
@@ -233,20 +265,41 @@ const axios = require('axios');
     
     if (yesterdayTask) {
       console.log(`📅 Found yesterday's task "${yesterdayTask.title}" with ID ${yesterdayTask.id}, status: ${yesterdayTask.status}.`);
-      
+      const wasCompleted = wasCompletedByLimit(yesterdayTask);
       // Check if yesterday's task was already completed by reaching the daily limit
-      if (wasCompletedByLimit(yesterdayTask)) {
+      if (wasCompleted && yesterdayTask.status === TICKTICK_STATUS_COMPLETED) {
         console.log('✅ Yesterday\'s task was already completed by reaching the daily limit. No need to complete it again.');
-      } else if (yesterdayTask.status === TICKTICK_STATUS_COMPLETED) {
-        console.log('✅ Yesterday\'s task is already completed (but not by reaching limit).');
-      } else {
-        // Complete yesterday's task only if it wasn't completed by reaching the limit
-        const completed = await completeTask(yesterdayTask.id, "yesterday's task");
-        if (!completed) {
-          console.log('⚠️  Could not complete yesterday\'s task, but continuing...');
+      } else if (yesterdayTask.status === TICKTICK_STATUS_WONT_DO){ 
+        console.log('✅ Yesterday\'s task is already marked as "Won\'t Do". No action needed.');
+      } else if (yesterdayTask.status === TICKTICK_STATUS_TODO) {
+        console.log('✅ Yesterday\'s task is marked as "To Do". Completing it now...');
+        if (wasCompleted) {
+          console.log('✅ Yesterday\'s task is already completed by limit, but not checked as properly.');
+          // Complete yesterday's task only if it wasn't completed by reaching the limit
+          const completed = await completeTask(yesterdayTask.id, "yesterday's task");
+            if (!completed) {
+              console.log('⚠️  Could not complete yesterday\'s task, but continuing...');
+            }
+          } else {
+          console.log('✅ Yesterday\'s task is not completed || failed.');
+          const updated = await updateTask(yesterdayTask.id, {
+            status: TICKTICK_STATUS_WONT_DO
+          }, "yesterday's task");
+          if (!updated) {
+            console.log('⚠️  Could not update yesterday\'s task, but continuing...');
+            process.exit(1);
+          }
+
+          console.log('✅ Yesterday\'s task marked as "Won\'t Do".');
+          // Now try to create today's task
+          const created = await createTask(TASK_TITLE, `Jogos hoje: ${total} (${stats.w}W ${stats.dr}D ${stats.l}L)`, todayDateString); 
+          if (!created) {
+            console.error('❌ Failed to create today\'s task after processing yesterday\'s task.');
+            process.exit(1);
+          }
+
         }
       }
-      
       // Wait a bit for TickTick to potentially create today's task
       console.log('⏳ Waiting for TickTick to create today\'s task...');
       await new Promise(resolve => setTimeout(resolve, 3000));
