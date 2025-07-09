@@ -291,13 +291,13 @@ const axios = require('axios');
           }
 
           console.log('✅ Yesterday\'s task marked as "Won\'t Do".');
-          // Now try to create today's task
-          const created = await createTask(TASK_TITLE, `Jogos hoje: ${total} (${stats.w}W ${stats.dr}D ${stats.l}L)`, todayDateString); 
-          if (!created) {
-            console.error('❌ Failed to create today\'s task after processing yesterday\'s task.');
-            process.exit(1);
-          }
-
+          
+        }
+        // Now try to create today's task
+        const created = await createTask(TASK_TITLE, `Jogos hoje: ${total} (${stats.w}W ${stats.dr}D ${stats.l}L)`, todayDateString); 
+        if (!created) {
+          console.error('❌ Failed to create today\'s task after processing yesterday\'s task.');
+          process.exit(1);
         }
       }
       // Wait a bit for TickTick to potentially create today's task
