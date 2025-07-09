@@ -351,18 +351,19 @@ const axios = require('axios');
 
     /* ---------- 6. Update task ---------- */
     // If we're marking the task as completed (status 2), use the /complete endpoint
-    if (newStatus === TICKTICK_STATUS_COMPLETED && statusChanged) {
-      const completed = await completeTask(todayTask.id, "today's task");
-      if (!completed) {
-        process.exit(1);
-      }
-
+    if (newStatus === TICKTICK_STATUS_COMPLETED && statusChanged) {      
       // Update content separately if needed
       if (contentChanged) {
         const updated = await updateTask(todayTask.id, { content: newContent }, "today's task content");
         if (!updated) {
           process.exit(1);
         }
+      }
+
+      // Complete the task using the /complete endpoint
+      const completed = await completeTask(todayTask.id, "today's task");
+      if (!completed) {
+        process.exit(1);
       }
     } else {
       // For other status changes or content-only updates, use the regular endpoint
@@ -375,11 +376,13 @@ const axios = require('axios');
       }
     }
 
-    // Now try to create tomorrow's task
-    const created = await createTask(TASK_TITLE, `Jogos hoje: ${total} (${stats.w}W ${stats.dr}D ${stats.l}L)`, tomorrowDateString);
-    if (!created) {
-      console.error('❌ Failed to create tomorrow\'s task after processing today\'s task.');
-      process.exit(1);
+    if (statusChanged) {
+      // Now try to create tomorrow's task
+      const created = await createTask(TASK_TITLE, `Jogos hoje: ${total} (${stats.w}W ${stats.dr}D ${stats.l}L)`, tomorrowDateString);
+      if (!created) {
+        console.error('❌ Failed to create tomorrow\'s task after processing today\'s task.');
+        process.exit(1);
+      }
     }
   }
 
