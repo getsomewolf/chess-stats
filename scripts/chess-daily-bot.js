@@ -236,7 +236,9 @@ const axios = require('axios');
     
     const totalPlayTime = formatDuration(stats.totalPlayTimeSeconds);
     
-    return `♟️ Daily Chess: ${total} Games (${stats.w}W ${stats.dr}D ${stats.l}L) | ${pointsDisplay} | ${winPercent}W ${drawPercent}D ${lossPercent}L | Total Play Time: ${totalPlayTime}`;
+    const gameText = total === 1 ? 'Game' : 'Games';
+    
+    return `♟️ Daily Chess: ${total} ${gameText} (${stats.w}W ${stats.dr}D ${stats.l}L) | ${pointsDisplay} | ${winPercent}W ${drawPercent}D ${lossPercent}L | Total Play Time: ${totalPlayTime}`;
   };
 
   // Helper function to generate detailed content
@@ -300,8 +302,8 @@ const axios = require('axios');
   // Helper function to extract game count from task content
   const extractGameCountFromContent = (content) => {
     if (!content) return 0;
-    // Try new format first: "♟️ Daily Chess: 12 Games"
-    let match = content.match(/♟️\s*Daily\s*Chess:\s*(\d+)\s*Games/i);
+    // Try new format first: "♟️ Daily Chess: 12 Games" or "♟️ Daily Chess: 1 Game"
+    let match = content.match(/♟️\s*Daily\s*Chess:\s*(\d+)\s*Games?/i);
     if (match) return parseInt(match[1], 10);
     
     // Fallback to old format: "Jogos hoje: 12"
