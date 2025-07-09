@@ -29,7 +29,8 @@ const axios = require('axios');
     TICKTICK_PROJECT_ID,
     USER_EMAIL = 'bot@example.com',
     TASK_TITLE = 'Daily chess',
-    TIMEZONE = 'UTC'
+    TIMEZONE = 'UTC',
+    DETAILED_TASK_CONTENT = 'false'
   } = process.env;
 
   if (!TICKTICK_ACCESS_TOKEN) {
@@ -112,7 +113,7 @@ const axios = require('axios');
 
   console.log(`♟️  Found ${games.length} games for ${CHESS_USER} in the last two months. Filtering for ${TIMEZONE}...`);
 
-  const initialStats = { w: 0, l: 0, dr: 0 };
+  const initialStats = { w: 0, l: 0, dr: 0, games: [], totalPlayTimeSeconds: 0 };
   const stats = games.reduce((acc, g) => {
     // Ensure PGN data is available to parse
     if (!g.pgn) {
@@ -139,15 +140,128 @@ const axios = require('axios');
     // If the game was played today (in the target timezone), count the result
     if (gameDateString === todayDateString) {
       const me = g.white.username.toLowerCase() === CHESS_USER.toLowerCase() ? g.white : g.black;
-      if (me.result === 'win') acc.w++;
-      else if (['resigned', 'checkmated', 'timeout', 'abandoned'].includes(me.result)) acc.l++;
-      else acc.dr++;
+      const opponent = g.white.username.toLowerCase() === CHESS_USER.toLowerCase() ? g.black : g.white;
+      
+      let result, resultReason;
+      if (me.result === 'win') {
+        acc.w++;
+        result = 'win';
+        resultReason = opponent.result === 'checkmated' ? 'checkmate' : 
+                      opponent.result === 'timeout' ? 'timeout' :
+                      opponent.result === 'resigned' ? 'resignation' :
+                      opponent.result === 'abandoned' ? 'abandonment' : 'win';
+      } else if (['resigned', 'checkmated', 'timeout', 'abandoned'].includes(me.result)) {
+        acc.l++;
+        result = 'loss';
+        resultReason = me.result === 'checkmated' ? 'checkmate' :
+                      me.result === 'timeout' ? 'timeout' :
+                      me.result === 'resigned' ? 'resignation' :
+                      me.result === 'abandoned' ? 'abandonment' : 'loss';
+      } else {
+        acc.dr++;
+        result = 'draw';
+        resultReason = me.result === 'agreed' ? 'agreement' :
+                      me.result === 'repetition' ? 'repetition' :
+                      me.result === 'stalemate' ? 'stalemate' :
+                      me.result === 'insufficient' ? 'insufficient material' :
+                      me.result === '50move' ? '50-move rule' : 'draw';
+      }
+
+      // Calculate game duration and end time
+      const gameEndTime = new Date(g.end_time * 1000);
+      const gameEndTimeLocal = timeFormatter.format(gameEndTime);
+      
+      // Extract time control and calculate approximate duration
+      const timeControlMatch = g.pgn.match(/\[TimeControl "(\d+)(?:\+(\d+))?"\]/);
+      let gameDurationSeconds = 0;
+      if (timeControlMatch) {
+        const baseTime = parseInt(timeControlMatch[1], 10);
+        const increment = timeControlMatch[2] ? parseInt(timeControlMatch[2], 10) : 0;
+        // Rough estimate: use average of base time (assuming both players use most of their time)
+        // This is an approximation since we don't have exact time used per player
+        gameDurationSeconds = Math.min(baseTime * 2, baseTime + increment * 40); // Rough estimate
+      }
+      
+      acc.totalPlayTimeSeconds += gameDurationSeconds;
+
+      // Store detailed game info for detailed mode
+      acc.games.push({
+        endTime: gameEndTimeLocal,
+        duration: gameDurationSeconds,
+        opponent: opponent.username,
+        result,
+        resultReason,
+        url: g.url
+      });
     }
 
     return acc;
   }, initialStats);
 
   const total = stats.w + stats.l + stats.dr;
+
+  // Helper function to format duration in seconds to human readable format
+  const formatDuration = (totalSeconds) => {
+    if (totalSeconds === 0) return '0min';
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    
+    if (hours > 0) {
+      return minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
+    }
+    return `${Math.max(1, minutes)}min`; // Show at least 1min for any non-zero duration
+  };
+
+  // Helper function to calculate points (simple system: +1 win, +0.5 draw, 0 loss)
+  const calculatePoints = (wins, draws, losses) => {
+    return wins * 1 + draws * 0.5 + losses * 0;
+  };
+
+  // Helper function to format percentages
+  const formatPercentage = (value, total) => {
+    if (total === 0) return '0%';
+    return Math.round((value / total) * 100) + '%';
+  };
+
+  // Helper function to generate brief content
+  const generateBriefContent = (stats, total) => {
+    const points = calculatePoints(stats.w, stats.dr, stats.l);
+    const pointsDisplay = points > 0 ? `+${points} Pts 🟢` : 
+                         points < 0 ? `${points} Pts 🔴` : 
+                         `${points} Pts ⚪`;
+    
+    const winPercent = formatPercentage(stats.w, total);
+    const drawPercent = formatPercentage(stats.dr, total);
+    const lossPercent = formatPercentage(stats.l, total);
+    
+    const totalPlayTime = formatDuration(stats.totalPlayTimeSeconds);
+    
+    return `♟️ Daily Chess: ${total} Games (${stats.w}W ${stats.dr}D ${stats.l}L) | ${pointsDisplay} | ${winPercent}W ${drawPercent}D ${lossPercent}L | Total Play Time: ${totalPlayTime}`;
+  };
+
+  // Helper function to generate detailed content
+  const generateDetailedContent = (stats, total) => {
+    const briefContent = generateBriefContent(stats, total);
+    
+    if (stats.games.length === 0) {
+      return briefContent;
+    }
+    
+    let detailedContent = briefContent + '\n\nToday\'s Matches:';
+    
+    stats.games.forEach((game, index) => {
+      const resultEmoji = game.result === 'win' ? '🏆' : 
+                         game.result === 'draw' ? '🤝' : '💔';
+      const duration = formatDuration(game.duration);
+      const resultText = game.result === 'win' ? `Win by ${game.resultReason}` :
+                        game.result === 'draw' ? `Draw by ${game.resultReason}` :
+                        `Loss by ${game.resultReason}`;
+      
+      detailedContent += `\n${game.endTime} | ${duration} | vs. ${game.opponent}: ${resultText} ${resultEmoji}`;
+    });
+    
+    return detailedContent;
+  };
 
   /* ---------- 3. Find TickTick Task ---------- */
   const api = 'https://api.ticktick.com/open/v1';
@@ -186,7 +300,12 @@ const axios = require('axios');
   // Helper function to extract game count from task content
   const extractGameCountFromContent = (content) => {
     if (!content) return 0;
-    const match = content.match(/Jogos\s+(?:hoje|ontem):\s*(\d+)/i);
+    // Try new format first: "♟️ Daily Chess: 12 Games"
+    let match = content.match(/♟️\s*Daily\s*Chess:\s*(\d+)\s*Games/i);
+    if (match) return parseInt(match[1], 10);
+    
+    // Fallback to old format: "Jogos hoje: 12"
+    match = content.match(/Jogos\s+(?:hoje|ontem):\s*(\d+)/i);
     return match ? parseInt(match[1], 10) : 0;
   };
 
@@ -299,7 +418,7 @@ const axios = require('axios');
 
         }
         // Now try to create today's task
-        const created = await createTask(TASK_TITLE, `Jogos hoje: ${total} (${stats.w}W ${stats.dr}D ${stats.l}L)`, todayDateString);
+        const created = await createTask(TASK_TITLE, generateBriefContent({w: 0, dr: 0, l: 0, totalPlayTimeSeconds: 0}, 0), todayDateString);
         if (!created) {
           console.error('❌ Failed to create today\'s task after processing yesterday\'s task.');
           process.exit(1);
@@ -336,7 +455,11 @@ const axios = require('axios');
   if (total >= DAILY_LIMIT && isFinalTime) newStatus = TICKTICK_STATUS_COMPLETED; // completed
   else if (isFinalTime) newStatus = TICKTICK_STATUS_WONT_DO; // won't do
 
-  const newContent = `Jogos hoje: ${total}  (${stats.w}W ${stats.dr}D ${stats.l}L)`;
+  // Generate content based on DETAILED_TASK_CONTENT setting
+  const isDetailedMode = DETAILED_TASK_CONTENT.toLowerCase() === 'true';
+  const newContent = isDetailedMode ? 
+    generateDetailedContent(stats, total) : 
+    generateBriefContent(stats, total);
 
   /* ---------- 5. Check if update is needed ---------- */
   const statusChanged = newStatus !== todayTask.status;
@@ -378,7 +501,7 @@ const axios = require('axios');
 
     if (statusChanged) {
       // Now try to create tomorrow's task
-      const created = await createTask(TASK_TITLE, `Jogos hoje: ${total} (${stats.w}W ${stats.dr}D ${stats.l}L)`, tomorrowDateString);
+      const created = await createTask(TASK_TITLE, generateBriefContent({w: 0, dr: 0, l: 0, totalPlayTimeSeconds: 0}, 0), tomorrowDateString);
       if (!created) {
         console.error('❌ Failed to create tomorrow\'s task after processing today\'s task.');
         process.exit(1);
