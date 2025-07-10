@@ -25,4 +25,5 @@ jobs:
           DAILY_LIMIT:   ${{ secrets.DAILY_LIMIT || 10 }}
           TIMEZONE:      ${{ secrets.TIMEZONE || 'UTC' }}
           NODE_ENV: production
+          DETAILED_TASK_CONTENT: ${{ secrets.DETAILED_TASK_CONTENT || 'false' }}
         run: node scripts/chess-daily-bot.js
