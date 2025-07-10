@@ -30,7 +30,7 @@ const axios = require('axios');
     USER_EMAIL = 'bot@example.com',
     TASK_TITLE = 'Daily chess',
     TIMEZONE = 'UTC',
-    DETAILED_TASK_CONTENT = 'false'
+    DETAILED_TASK_CONTENT = false
   } = process.env;
 
   if (!TICKTICK_ACCESS_TOKEN) {
@@ -55,6 +55,7 @@ const axios = require('axios');
     timeZone: TIMEZONE,
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: false
   });
 
@@ -80,6 +81,11 @@ const axios = require('axios');
   console.debug(`📅 Today in ${TIMEZONE}: ${todayDateString}`);
   console.debug(`📅 Yesterday in ${TIMEZONE}: ${yesterdayDateString}`);
   console.debug(`🕐 Current time in ${TIMEZONE}: ${currentTime} (Final time: ${isFinalTime})`);
+
+  const hhmmssToSec = (hhmmss) => {
+    const [hh, mm, ss] = hhmmss.split(':').map(Number);
+    return hh * 3600 + mm * 60 + ss;
+  };
 
   /* ---------- 2. Fetch Chess.com Games ---------- */
   const fetchGamesForMonth = async (year, month) => {
@@ -169,23 +175,23 @@ const axios = require('axios');
 
       // Calculate game duration and end time
       const gameEndTime = new Date(g.end_time * 1000);
+      const gameStartTime = timeFormatter.format(gameUtcDate.getTime())
       const gameEndTimeLocal = timeFormatter.format(gameEndTime);
       
-      // Extract time control and calculate approximate duration
-      const timeControlMatch = g.pgn.match(/\[TimeControl "(\d+)(?:\+(\d+))?"\]/);
       let gameDurationSeconds = 0;
-      if (timeControlMatch) {
-        const baseTime = parseInt(timeControlMatch[1], 10);
-        const increment = timeControlMatch[2] ? parseInt(timeControlMatch[2], 10) : 0;
-        // Rough estimate: use average of base time (assuming both players use most of their time)
-        // This is an approximation since we don't have exact time used per player
-        gameDurationSeconds = Math.min(baseTime * 2, baseTime + increment * 40); // Rough estimate
-      }
+      let startSeconds = hhmmssToSec(gameStartTime);
+      let endSeconds = hhmmssToSec(gameEndTimeLocal);
       
+      console.debug(`Game start time in UTC: ${gameStartTime} (${startSeconds} seconds)`);
+      console.debug(`Game end time in ${TIMEZONE}: ${gameEndTimeLocal}`);
+
+      gameDurationSeconds = endSeconds - startSeconds;
+
       acc.totalPlayTimeSeconds += gameDurationSeconds;
 
       // Store detailed game info for detailed mode
       acc.games.push({
+        startTime: gameDateString,
         endTime: gameEndTimeLocal,
         duration: gameDurationSeconds,
         opponent: opponent.username,
@@ -214,7 +220,8 @@ const axios = require('axios');
 
   // Helper function to calculate points (simple system: +1 win, +0.5 draw, 0 loss)
   const calculatePoints = (wins, draws, losses) => {
-    return wins * 1 + draws * 0.5 + losses * 0;
+    const val = 8;
+    return wins * val + draws * 0 + losses * -val;
   };
 
   // Helper function to format percentages
@@ -227,8 +234,8 @@ const axios = require('axios');
   const generateBriefContent = (stats, total) => {
     const points = calculatePoints(stats.w, stats.dr, stats.l);
     const pointsDisplay = points > 0 ? `+${points} Pts 🟢` : 
-                         points < 0 ? `${points} Pts 🔴` : 
-                         `${points} Pts ⚪`;
+                          points < 0 ? `${points} Pts 🔴` : 
+                          `${points} Pts ⚪`;
     
     const winPercent = formatPercentage(stats.w, total);
     const drawPercent = formatPercentage(stats.dr, total);
@@ -253,7 +260,7 @@ const axios = require('axios');
     
     stats.games.forEach((game, index) => {
       const resultEmoji = game.result === 'win' ? '🏆' : 
-                         game.result === 'draw' ? '🤝' : '💔';
+                          game.result === 'draw' ? '🤝' : '💔';
       const duration = formatDuration(game.duration);
       const resultText = game.result === 'win' ? `Win by ${game.resultReason}` :
                         game.result === 'draw' ? `Draw by ${game.resultReason}` :
@@ -458,7 +465,7 @@ const axios = require('axios');
   else if (isFinalTime) newStatus = TICKTICK_STATUS_WONT_DO; // won't do
 
   // Generate content based on DETAILED_TASK_CONTENT setting
-  const isDetailedMode = DETAILED_TASK_CONTENT.toLowerCase() === 'true';
+  const isDetailedMode = DETAILED_TASK_CONTENT;
   const newContent = isDetailedMode ? 
     generateDetailedContent(stats, total) : 
     generateBriefContent(stats, total);
