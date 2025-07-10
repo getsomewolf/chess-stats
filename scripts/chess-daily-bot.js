@@ -30,9 +30,10 @@ const axios = require('axios');
     USER_EMAIL = 'bot@example.com',
     TASK_TITLE = 'Daily chess',
     TIMEZONE = 'UTC',
-    DETAILED_TASK_CONTENT = false
+    DETAILED_TASK_CONTENT
   } = process.env;
 
+  const isDetailedMode = DETAILED_TASK_CONTENT === 'true';
   if (!TICKTICK_ACCESS_TOKEN) {
     console.error('❌ Error: TICKTICK_ACCESS_TOKEN must be set.');
     console.log('Please run "node scripts/get-refresh-token.js" to get your access token and set it in your environment.');
