@@ -2,7 +2,7 @@ name: Chess ➜ TickTick (Daily)
 
 on:
   schedule:
-    - cron:  '*/30 * * * *'   # atualiza a cada 30 min
+    - cron:  '*/10 * * * *'   # atualiza a cada 10 min
   workflow_dispatch:
 
 jobs:
