@@ -76,7 +76,7 @@ const axios = require('axios');
   // Determine if it's "final time" (after 23:00 in user's timezone)
   const currentTime = timeFormatter.format(now);
   const [hour, minute] = currentTime.split(':').map(Number);
-  const isFinalTime = hour >= 23;
+  const isFinalTime = hour >= 23 && minute >= 50;
 
   console.debug(`📅 Today in ${TIMEZONE}: ${todayDateString}`);
   console.debug(`📅 Yesterday in ${TIMEZONE}: ${yesterdayDateString}`);
