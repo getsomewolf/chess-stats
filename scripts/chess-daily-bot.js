@@ -30,10 +30,9 @@ const axios = require('axios');
     USER_EMAIL = 'bot@example.com',
     TASK_TITLE = 'Daily chess',
     TIMEZONE = 'UTC',
-    DETAILED_TASK_CONTENT
+    DETAILED_TASK_CONTENT = 'false'
   } = process.env;
 
-  const isDetailedMode = DETAILED_TASK_CONTENT === 'true';
   if (!TICKTICK_ACCESS_TOKEN) {
     console.error('❌ Error: TICKTICK_ACCESS_TOKEN must be set.');
     console.log('Please run "node scripts/get-refresh-token.js" to get your access token and set it in your environment.');
@@ -192,7 +191,7 @@ const axios = require('axios');
 
       // Store detailed game info for detailed mode
       acc.games.push({
-        startTime: gameDateString,
+        startTime: gameStartTime,
         endTime: gameEndTimeLocal,
         duration: gameDurationSeconds,
         opponent: opponent.username,
@@ -219,7 +218,7 @@ const axios = require('axios');
     return `${Math.max(1, minutes)}min`; // Show at least 1min for any non-zero duration
   };
 
-  // Helper function to calculate points (simple system: +1 win, +0.5 draw, 0 loss)
+  // Helper function to calculate points (simple system: +8 win, +0 draw, -8 loss)
   const calculatePoints = (wins, draws, losses) => {
     const val = 8;
     return wins * val + draws * 0 + losses * -val;
@@ -267,7 +266,7 @@ const axios = require('axios');
                         game.result === 'draw' ? `Draw by ${game.resultReason}` :
                         `Loss by ${game.resultReason}`;
       
-      detailedContent += `\n${game.endTime} | ${duration} | vs. ${game.opponent}: ${resultText} ${resultEmoji}`;
+      detailedContent += `\n${game.endTime.substring(0, 5)} | ${duration} | vs. ${game.opponent}: ${resultText} ${resultEmoji}`;
     });
     
     return detailedContent;
@@ -466,7 +465,7 @@ const axios = require('axios');
   else if (isFinalTime) newStatus = TICKTICK_STATUS_WONT_DO; // won't do
 
   // Generate content based on DETAILED_TASK_CONTENT setting
-  const isDetailedMode = DETAILED_TASK_CONTENT;
+  const isDetailedMode = DETAILED_TASK_CONTENT === 'true';
   const newContent = isDetailedMode ? 
     generateDetailedContent(stats, total) : 
     generateBriefContent(stats, total);
