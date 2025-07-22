@@ -2,12 +2,17 @@ name: Chess ➜ TickTick (Daily)
 
 on:
   schedule:
-    - cron:  '*/10 * * * *'   # atualiza a cada 10 min
+    - cron:  '*/30 * * * *'   # runs every 30 minutes for better reliability
   workflow_dispatch:
+
+concurrency:
+  group: chess-daily-bot
+  cancel-in-progress: false
 
 jobs:
   chess:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
