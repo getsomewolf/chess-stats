@@ -4,6 +4,10 @@ const axios = require('axios');
 
 
 (async () => {
+  // Log execution start time for timing analysis
+  const executionStartTime = new Date();
+  console.log(`🚀 Chess Daily Bot started at ${executionStartTime.toISOString()}`);
+
   // Load environment variables from .env file when running locally
   if (process.env.NODE_ENV !== 'production' && !process.env.GITHUB_ACTIONS) {
     // Suppress dotenv's new tip message
@@ -520,4 +524,9 @@ const axios = require('axios');
 
   const actionMode = isFinalTime ? 'FINAL' : 'UPDATE';
   console.log(`[${actionMode}] ${total} jogos - ${stats.w}W ${stats.dr}D ${stats.l}L - status→${newStatus}`);
+  
+  // Log execution completion time for timing analysis
+  const executionEndTime = new Date();
+  const executionDuration = Math.round((executionEndTime - executionStartTime) / 1000);
+  console.log(`✅ Chess Daily Bot completed at ${executionEndTime.toISOString()} (duration: ${executionDuration}s)`);
 })();

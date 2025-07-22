@@ -23,7 +23,8 @@ The bot will:
 - **Intelligent Task Management**: The bot automatically handles task transitions between days by completing previous day's tasks when needed.
 - **Time-Zone Aware**: Uses your configured timezone to determine when it's the "final" time of day to mark uncompleted tasks.
 - **Automatic Task Creation**: Works with TickTick's recurring task feature - when a previous day's task is completed, TickTick automatically creates the next day's task.
-- **Flexible Scheduling**: Runs on a single 30-minute interval but intelligently determines its behavior based on time of day.
+- **Flexible Scheduling**: Runs on a 30-minute interval with improved reliability to handle GitHub Actions scheduling constraints.
+- **Execution Monitoring**: Enhanced logging to track execution times and identify potential scheduling issues.
 - **Backward Compatibility**: Maintains compatibility with existing task content formats.
 
 ## Task Content Examples
